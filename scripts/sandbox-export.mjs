@@ -19,15 +19,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
 
 function findBundle(appid) {
+  const names = ["app-service.js", "appservice.app.js"];
+  // mp_analyze 解包产物：static/out/<appid>/app/（与解包端路径约定一致，免手动建软链）
+  const outApp = join(PROJECT_ROOT, "static", "out", appid, "app");
+  for (const n of names) { const c = join(outApp, n); if (existsSync(c)) return c; }
+  // 回退：static/unpacked/<appid>/[<ver>/]
   const unpackDir = join(PROJECT_ROOT, "static", "unpacked", appid);
-  if (!existsSync(unpackDir)) return null;
-  const versions = readdirSync(unpackDir).filter(d => /^\d+$/.test(d)).sort((a, b) => +b - +a);
-  for (const ver of versions) {
-    const c = join(unpackDir, ver, "app-service.js");
-    if (existsSync(c)) return c;
+  if (existsSync(unpackDir)) {
+    const versions = readdirSync(unpackDir).filter(d => /^\d+$/.test(d)).sort((a, b) => +b - +a);
+    for (const ver of versions) for (const n of names) { const c = join(unpackDir, ver, n); if (existsSync(c)) return c; }
+    for (const n of names) { const c = join(unpackDir, n); if (existsSync(c)) return c; }
   }
-  const direct = join(unpackDir, "app-service.js");
-  return existsSync(direct) ? direct : null;
+  return null;
 }
 
 function parseArgs() {

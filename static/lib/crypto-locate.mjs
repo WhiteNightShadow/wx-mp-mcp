@@ -311,6 +311,11 @@ const SECURITY_SDK_WEAK_RE =
 const SIGN_HEADER_KEY_RE =
   /["'`](?:x[-_]?ca[-_]?sign|x[-_]?sign|sign|signature|nonce[-_]?str|Operation-Type|x[-_]?ca[-_]?key|x[-_]?ca[-_]?nonce|x[-_]?ca[-_]?timestamp|MOLE)["'`]\s*:/i;
 
+// 网关/SDK 签名【协议字面量】:这些 token 出现 = 请求被签名,即便签名器被字符串数组混淆、
+// 按函数名扫不出(强信号,误报率低)。覆盖阿里云网关 hmac-auth、各大厂 SDK 签名头。
+const SIGN_PROTOCOL_RE =
+  /hmac-auth-v\d|["'`]hmac-auth["'`]|x[-_]?hmac[-_]?digest|x[-_]?ca[-_]?signature|#\s*hmac[-_]?sha(?:256|1)\b|__NS_sig|\bmtgsig\b|\bwsgsig\b|\bx[-_]?bogus\b|\ba_bogus\b|\bx[-_]?gorgon\b|\bx[-_]?khronos\b|x[-_]?s[-_]?common/i;
+
 // 响应体解密 / 请求体整体加密(body-encrypted 模式)
 const BODY_CRYPTO_RE =
   /\bAES\.decrypt\s*\(|\bdecrypt(?:Data|Resp|Response)?\s*\(|\bjiemi\b|["'`]encrypted["'`]\s*:|\.encrypted\b|encryptedData2?\b|rsaBase64|\.encrypt\s*\([^)]*(?:mobile|phone|passwd|password|pwd)/i;
@@ -329,6 +334,7 @@ function findSigningSignals(unit) {
   for (const m of text.matchAll(new RegExp(SECURITY_SDK_STRONG_RE, "g"))) push("security-sdk", m);
   for (const m of text.matchAll(new RegExp(SECURITY_SDK_WEAK_RE, "g"))) push("security-sdk-weak", m);
   for (const m of text.matchAll(new RegExp(SIGN_HEADER_KEY_RE, "gi"))) push("sign-header", m);
+  for (const m of text.matchAll(new RegExp(SIGN_PROTOCOL_RE, "gi"))) push("sign-protocol", m);
   for (const m of text.matchAll(new RegExp(BODY_CRYPTO_RE, "gi"))) push("body-crypto", m);
 
   // 拦截器体内含 crypto/sign → 强信号(签名在拦截器里算)
@@ -490,12 +496,13 @@ export async function locateCrypto(input) {
   ) || signalKinds.has("sign-header");
   const hasSecuritySdk = signalKinds.has("security-sdk");
   const hasSignFlag = signalKinds.has("sign-flag");
+  const hasSignProtocol = signalKinds.has("sign-protocol");
   const hasBodyCrypto = signalKinds.has("body-crypto");
   const hasSignFn = uniq.some((f) => f.score >= 5);
 
   // 强信号任一命中 → 判定有签名/加密(消除"重度签名却报无签名"的假阴性)
   const hasSigning =
-    hasSignFn || interceptorSigns || headerInjectsSign || hasSecuritySdk || hasSignFlag;
+    hasSignFn || interceptorSigns || headerInjectsSign || hasSecuritySdk || hasSignFlag || hasSignProtocol;
   // body 整体加密(响应解密/请求体字段加密)单列:即便无签名也属"需还原加密"
   const hasEncryption = hasBodyCrypto || algorithms.some((a) => ["aes", "des", "rsa", "rc4"].includes(a.algo) && a.weight >= 3 && (hasSignFn || hasSecuritySdk || hasBodyCrypto));
 
@@ -504,6 +511,7 @@ export async function locateCrypto(input) {
   if (hasSignFn) sigSummary.push(`${uniq.length}个签名函数`);
   if (hasSecuritySdk) sigSummary.push(`安全SDK[${[...new Set(signingSignals.filter((s) => s.kind === "security-sdk").map((s) => s.signal))].slice(0, 4).join("/")}]`);
   if (hasSignFlag) sigSummary.push(`签名开关[${[...new Set(signingSignals.filter((s) => s.kind === "sign-flag").map((s) => s.signal))].slice(0, 3).join("/")}]`);
+  if (hasSignProtocol) sigSummary.push(`签名协议[${[...new Set(signingSignals.filter((s) => s.kind === "sign-protocol").map((s) => s.signal))].slice(0, 4).join("/")}]`);
   if (signalKinds.has("interceptor-crypto")) sigSummary.push("拦截器内签名");
   if (headerInjectsSign) sigSummary.push("签名header");
   if (hasBodyCrypto) sigSummary.push("body加密/响应解密");

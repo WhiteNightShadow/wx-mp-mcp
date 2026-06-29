@@ -22,12 +22,26 @@ const err = (e: unknown) => ({
 });
 
 async function runScript(script: string, args: string[], timeoutMs = 120_000): Promise<string> {
-  const { stdout, stderr } = await execFileAsync("node", [join(PROJECT_ROOT, script), ...args], {
-    cwd: PROJECT_ROOT,
-    timeout: timeoutMs,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return (stdout + (stderr ? `\n[stderr]\n${stderr}` : "")).trim();
+  try {
+    const { stdout, stderr } = await execFileAsync("node", [join(PROJECT_ROOT, script), ...args], {
+      cwd: PROJECT_ROOT,
+      timeout: timeoutMs,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return (stdout + (stderr ? `\n[stderr]\n${stderr}` : "")).trim();
+  } catch (e) {
+    // 失败/超时时【不回吐整条命令行】(execFile 默认把含 eval 源码的完整命令拼进 message);
+    // 只返回脚本自身的 stdout/stderr + 可操作提示。
+    const err = e as { stdout?: string; stderr?: string; killed?: boolean; signal?: string; code?: number; message?: string };
+    const out = (err.stdout || "").toString().trim();
+    const se = (err.stderr || "").toString().trim();
+    const timedOut = err.killed || err.signal === "SIGTERM" || /timed?\s?out|ETIMEDOUT/i.test(err.message || "");
+    const hint = timedOut
+      ? `\n⏱ 沙箱进程在 ${timeoutMs}ms 内未结束被终止(疑似同步死循环 / 未排空的定时器)。对策:调大 timeout_ms;对 JSVMP 签名调用改用 runInContext(code, ms) 单独限时;确保代码末尾不留挂起的循环。`
+      : "";
+    const body = [out, se && `[stderr]\n${se}`].filter(Boolean).join("\n").slice(0, 4000);
+    throw new Error((body || `脚本执行失败 (exit ${err.code ?? "?"})`) + hint);
+  }
 }
 
 export function registerStaticTools(server: McpServer): void {
@@ -379,23 +393,31 @@ export function registerStaticTools(server: McpServer): void {
     {
       title: "Run code in mini-program sandbox",
       description:
-        "在离线沙箱中加载小程序 bundle (app-service.js)，执行任意 JS 代码。" +
-        "用于调用 SDK 签名函数、分析加密逻辑、提取运行时数据。" +
-        "代码中可用: ctx (沙箱上下文), requireMod(path), wpRequire(moduleId), sandbox (全局对象)。" +
-        "需要先 mp_analyze 解包。",
+        "在离线沙箱中加载小程序 bundle (app-service.js)，执行任意 JS 代码。用于调用 SDK 签名函数、分析加密逻辑、提取运行时数据。需要先 mp_analyze 解包。\n" +
+        "【eval 作用域契约】代码运行在 ESM AsyncFunction 里，注入 5 个参数：\n" +
+        "  · ctx —— 沙箱上下文 (ctx.sandbox / ctx.requireMod / ctx.wpRequire / ctx.setTimestamp 等)\n" +
+        "  · requireMod(path) —— 按 WeChat 模块路径取模块；wpRequire(id) —— 按 webpack 数字 id 取模块(惰性、不引导 app)\n" +
+        "  · sandbox —— 沙箱全局对象：微信全局走 sandbox.wx / sandbox.getApp()，模块工厂里 self===sandbox\n" +
+        "  · runInContext(code, ms=8000) —— 在沙箱 realm 内【带超时】执行(同步死循环会抛 timeout 而非拖死)；JSVMP/VMP 签名调用建议用它\n" +
+        "注意：这是 ESM 上下文，没有 node 的 require；要用 globalThis.crypto / Buffer。\n" +
+        "分包里的签名 SDK(依赖主包 runtime)用 bundle_paths 传[主包,分包]协同加载。",
       inputSchema: {
         appid: z.string().describe("小程序 appid"),
-        code: z.string().describe("要执行的 JS 代码，可用 ctx/requireMod/wpRequire/sandbox"),
-        bundle_path: z.string().optional().describe("自定义 app-service.js 路径 (默认自动查找)"),
+        code: z.string().describe("要执行的 JS 代码；可用 ctx/requireMod/wpRequire/sandbox/runInContext"),
+        bundle_path: z.string().optional().describe("自定义 app-service.js 路径 (默认按 appid 自动查找)"),
+        bundle_paths: z.array(z.string()).optional().describe("多 bundle 协同加载[主包,分包,...]，顺序拼接单次载入(分包签名 SDK 依赖主包 runtime 时用)"),
         storage: z.string().optional().describe("预设 wx storage JSON (如 '{\"key\":\"value\"}')"),
+        ua: z.string().optional().describe("覆盖 navigator.userAgent (VMP 常把 UA 编进签名，需与目标客户端一致)"),
+        timeout_ms: z.number().optional().describe("沙箱进程整体超时 (默认 60000)"),
       },
     },
-    async ({ appid, code, bundle_path, storage }: { appid: string; code: string; bundle_path?: string; storage?: string }) => {
+    async ({ appid, code, bundle_path, bundle_paths, storage, ua, timeout_ms }: { appid: string; code: string; bundle_path?: string; bundle_paths?: string[]; storage?: string; ua?: string; timeout_ms?: number }) => {
       try {
         const args = [appid, "--eval", code];
-        if (bundle_path) args.push("--bundle", bundle_path);
+        for (const b of bundle_paths || (bundle_path ? [bundle_path] : [])) args.push("--bundle", b);
         if (storage) args.push("--storage", storage);
-        const output = await runScript("scripts/sandbox-run.mjs", args, 60_000);
+        if (ua) args.push("--ua", ua);
+        const output = await runScript("scripts/sandbox-run.mjs", args, timeout_ms || 60_000);
         return ok(output);
       } catch (e) {
         return err(e);
@@ -408,14 +430,19 @@ export function registerStaticTools(server: McpServer): void {
     {
       title: "List sandbox modules",
       description:
-        "列出小程序 bundle 中注册的所有模块路径。用于发现 SDK 签名模块位置。需要先 mp_analyze 解包。",
+        "列出小程序 bundle 中注册的所有模块路径。用于发现 SDK 签名模块位置。需要先 mp_analyze 解包。" +
+        "分包签名 SDK 依赖主包 runtime 时用 bundle_paths 传[主包,分包]协同加载。",
       inputSchema: {
         appid: z.string().describe("小程序 appid"),
+        bundle_path: z.string().optional().describe("自定义 app-service.js 路径 (默认按 appid 自动查找)"),
+        bundle_paths: z.array(z.string()).optional().describe("多 bundle 协同加载[主包,分包,...]"),
       },
     },
-    async ({ appid }: { appid: string }) => {
+    async ({ appid, bundle_path, bundle_paths }: { appid: string; bundle_path?: string; bundle_paths?: string[] }) => {
       try {
-        return ok(await runScript("scripts/sandbox-run.mjs", [appid, "--list-modules"], 60_000));
+        const args = [appid, "--list-modules"];
+        for (const b of bundle_paths || (bundle_path ? [bundle_path] : [])) args.push("--bundle", b);
+        return ok(await runScript("scripts/sandbox-run.mjs", args, 60_000));
       } catch (e) {
         return err(e);
       }
