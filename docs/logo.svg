@@ -1,0 +1,22 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tile" x1="20" y1="10" x2="108" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10D87E"/>
+      <stop offset="1" stop-color="#0E904B"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="64" y1="8" x2="64" y2="74" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="38" y1="43" x2="74" y2="67" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#15A95B"/>
+      <stop offset="1" stop-color="#0B7C40"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#tile)"/>
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#gloss)"/>
+  <line x1="79" y1="79" x2="103" y2="103" stroke="#ffffff" stroke-width="15" stroke-linecap="round"/>
+  <circle cx="55" cy="55" r="34" fill="#ffffff"/>
+  <path d="M48 43 L36 55 L48 67" stroke="url(#ink)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 43 L74 55 L62 67" stroke="url(#ink)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

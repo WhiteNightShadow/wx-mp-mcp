@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+logs/
+data/
+.DS_Store
+static/out/
+static/unpacked/
+captures/

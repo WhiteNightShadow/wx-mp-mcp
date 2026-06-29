@@ -1,0 +1,32 @@
+{
+  "name": "wx-mp-mcp",
+  "version": "0.1.1",
+  "private": true,
+  "description": "WeChat mini-program static analysis MCP server. One-click unpack, sign/crypto detection, sign cracking, API extraction, and repro code generation for authorized mini programs.",
+  "type": "module",
+  "bin": {
+    "wx-mp-mcp": "dist/index.js"
+  },
+  "exports": "./dist/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "analyze": "node static/mp-analyze.mjs",
+    "sign-crack": "node scripts/sign-crack.mjs",
+    "decrypt": "node scripts/wxapkg-decrypt.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
