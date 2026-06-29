@@ -6,21 +6,19 @@
 
 **微信小程序逆向 MCP**
 
-**在线实时解包 · AI 静态分析还原** —— 把小程序接口的签名 / 加密参数，还原成一个**本地 Node.js 就能直接跑**的脚本
+把小程序接口的签名 / 加密参数，还原成一个**本地 Node.js 就能直接跑**的脚本
 
 <br>
 
-![Core](https://img.shields.io/badge/实时解包-AI静态还原-07C160?style=flat-square)
 ![MCP](https://img.shields.io/badge/MCP-Server-000000?style=flat-square)
 ![Node](https://img.shields.io/badge/Node.js-≥18-339933?style=flat-square&logo=node.js&logoColor=white)
+![WeChat](https://img.shields.io/badge/微信小程序-07C160?style=flat-square&logo=wechat&logoColor=white)
 ![Platform](https://img.shields.io/badge/macOS_·_Windows-555?style=flat-square)
 ![NonInvasive](https://img.shields.io/badge/不碰微信进程-2EA043?style=flat-square)
 
 </div>
 
-> 一个 MCP（Model Context Protocol）Server，装进你的 AI 编码工具（Claude Code / Cursor / Codex）。
->
-> **🎯 核心能力 = 在线实时解包 + AI 静态分析还原**：对本机微信缓存里的**任意小程序**做**实时解密解包**，再让 **AI 静态读懂**其接口的签名 / 加密逻辑，**还原成本地能独立运行的脚本** —— 全程零侵入、不碰微信进程。（抓包 / 沙箱只是签名被运行时加密、静态读不出时的辅助手段。）
+> 一个 MCP（Model Context Protocol）Server，装进你的 AI 编码工具（Claude Code / Cursor / Codex），让 AI 自动完成微信小程序的**解包 → 抓包 → 签名分析 → 本地复现**。
 
 ---
 
