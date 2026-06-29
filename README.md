@@ -22,7 +22,7 @@
 
 ---
 
-## ✨ 三个核心能力
+<h2><img src="docs/sec-features.svg" height="26" align="middle">&nbsp;三个核心能力</h2>
 
 <table>
 <tr>
@@ -66,30 +66,27 @@ AI 读 js 定位签名算法 → 穷举反推 / 沙箱实跑复现 → 导出脱
 
 ---
 
-## 🔗 工作流
+<h2><img src="docs/sec-flow.svg" height="26" align="middle">&nbsp;工作流</h2>
 
-```mermaid
-flowchart LR
-    A["📦 mp_analyze<br/>解包 + 定位签名"]
-    A -->|静态读得出| E
-    A -->|运行时加密 / JSVMP| B
-    B["🎯 mp_capture_*<br/>抓真实请求样本"]
-    B --> C["🔑 mp_sign_crack<br/>穷举签名公式"]
-    B --> D["🧬 mp_sandbox_run<br/>沙箱实跑签名函数"]
-    C --> E
-    D --> E
-    E["📤 mp_sandbox_export<br/>导出 signer.mjs"]
-    E --> F["🟢 本地 node 直接跑<br/>脱离微信算出 sign"]
+<table>
+<tr>
+<td align="center" width="120"><img src="docs/icon-unpack.svg" width="50"><br><b>解包分析</b><br><sub><code>mp_analyze</code></sub></td>
+<td align="center"><b>→</b></td>
+<td align="center" width="120"><img src="docs/icon-capture.svg" width="50"><br><b>抓真实样本</b><br><sub><code>mp_capture_*</code></sub></td>
+<td align="center"><b>→</b></td>
+<td align="center" width="120"><img src="docs/wf-crack.svg" width="50"><br><b>破解 / 沙箱</b><br><sub><code>mp_sign_crack</code></sub></td>
+<td align="center"><b>→</b></td>
+<td align="center" width="120"><img src="docs/icon-export.svg" width="50"><br><b>导出</b><br><sub><code>mp_sandbox_export</code></sub></td>
+<td align="center"><b>→</b></td>
+<td align="center" width="120"><img src="docs/wf-result.svg" width="50"><br><b>本地出 sign</b><br><sub><code>node signer.mjs</code></sub></td>
+</tr>
+</table>
 
-    style A fill:#07C160,stroke:#fff,color:#fff
-    style F fill:#2EA043,stroke:#fff,color:#fff
-```
-
-多数无混淆小程序，`mp_analyze` 一步就能定位签名并生成复现代码；只有签名被运行时加密 / JSVMP 混淆、静态读不出时，才走抓包 + 破解 / 沙箱那条支线。
+多数无混淆小程序，`mp_analyze` 一步就能定位签名并生成复现代码（**走得出 → 直接导出**）；只有签名被运行时加密 / JSVMP 混淆、静态读不出时，才走 **抓包 → 破解 / 沙箱** 那条支线。
 
 ---
 
-## 🚀 快速接入
+<h2><img src="docs/sec-start.svg" height="26" align="middle">&nbsp;快速接入</h2>
 
 ### 1. 安装
 
@@ -153,23 +150,23 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 ---
 
-## 🧰 工具清单（12）
+<h2><img src="docs/sec-tools.svg" height="26" align="middle">&nbsp;工具清单（12）</h2>
 
 | 工具 | 作用 |
 |------|------|
-| **📦 解包分析** | |
+| <img src="docs/icon-unpack.svg" height="18" align="middle"> **解包分析** | |
 | `mp_list_apps` | 列出本机微信缓存的所有小程序（appid / 版本 / 包数量） |
 | `mp_decrypt` | 解密提取单个 `.wxapkg`（传 appid 自动找最新，或传文件路径） |
 | `mp_analyze` | **一键分析**：解密解包(主包+分包+插件) → 签名/加密定位 → API 抽取 → 复现代码生成 → 报告（含 `crackHint`：候选密钥+算法+参数序） |
 | `mp_analyze_all` | 批量分析本机全部缓存小程序 |
-| **🎯 抓包** | |
+| <img src="docs/icon-capture.svg" height="18" align="middle"> **抓包** | |
 | `mp_capture_start` | 启动 mitmproxy 代理抓包，请求自动存成结构化 JSONL（默认 :8080，可按 URL 过滤） |
 | `mp_capture_list` | 查看抓到的请求，自动标出 `sign` / `token` 等签名字段 |
 | `mp_capture_stop` | 停止抓包，返回文件路径与请求数 |
 | `mp_capture_import` | **导入已有抓包** → 归一成 JSONL（HAR / cURL / JSON 体 / JSONL，自己抓的包直接用，免走代理） |
-| **🔑 签名破解** | |
+| <img src="docs/wf-crack.svg" height="18" align="middle"> **签名破解** | |
 | `mp_sign_crack` | 签名穷举：抓包样本 → 枚举参数子集 × 算法(HMAC/MD5/SHA/AES/DES/3DES) → 反推精确公式并生成复现代码（传 `report` 直接吃 `mp_analyze` 的候选密钥+算法，免手动搬运） |
-| **🧬 离线沙箱** | |
+| <img src="docs/icon-analyze.svg" height="18" align="middle"> **离线沙箱** | |
 | `mp_sandbox_modules` | 列出 bundle 里的所有模块，定位 SDK 签名模块位置 |
 | `mp_sandbox_run` | 在离线 Node 沙箱加载 `app-service.js`，执行任意 js（直调签名函数验证） |
 | `mp_sandbox_export` | **导出独立签名脚本**：追踪依赖、提取最小模块子集，生成不依赖 sandbox / bundle 的自包含 `.mjs` |
@@ -178,7 +175,7 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 ---
 
-## 💬 问题反馈 / 联系
+<h2><img src="docs/sec-feedback.svg" height="26" align="middle">&nbsp;问题反馈 / 联系</h2>
 
 使用中遇到问题、想反馈 bug、或交流逆向思路，欢迎加微信：
 
@@ -186,7 +183,7 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 ---
 
-## 📝 迭代记录
+<h2><img src="docs/sec-changelog.svg" height="26" align="middle">&nbsp;迭代记录</h2>
 
 **v0.1.1**
 - 新增 `mp_capture_import`：已有抓包（HAR / cURL / JSON 体 / JSONL）一键归一，自己抓的包直接喂破解，免走代理。
