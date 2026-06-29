@@ -25,14 +25,18 @@ const DEFAULT_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20 MiniProgramEnv/Mac MacWechat/3.8.7";
 
-function buildWxStub(appid, storage, appVersion, log) {
+function buildWxStub(appid, storage, appVersion, log, device) {
+  // device: 可选「真机种子」——把抓包/真机的 system/device 字段 merge 进默认 stub，
+  // 让离线签名的环境指纹与目标设备一致(字节级复现)。不传则与改前完全一致(默认不变)。
   const sysInfo = {
     platform: "mac", system: "Mac OS X 14.2.0", version: "8.0.0",
     SDKVersion: "3.8.7", model: "Mac15,3", brand: "apple",
     screenWidth: 1512, screenHeight: 982, windowWidth: 1512, windowHeight: 982,
     pixelRatio: 2, language: "zh_CN", fontSizeSetting: 16, statusBarHeight: 0,
     safeArea: { top: 0, left: 0, right: 1512, bottom: 982, width: 1512, height: 982 },
+    ...(device || {}),
   };
+  // getDeviceInfo / getAppBaseInfo 从 merged sysInfo 取值,保证一处覆盖、各接口一致(避免 system/SDKVersion 在不同 API 间矛盾露馅)
   return {
     getStorageSync: (k) => (k in storage ? storage[k] : ""),
     setStorageSync: (k, v) => { storage[k] = v; },
@@ -41,9 +45,9 @@ function buildWxStub(appid, storage, appVersion, log) {
     removeStorageSync: (k) => { delete storage[k]; },
     getSystemInfoSync: () => sysInfo,
     getSystemInfo: (o) => o.success?.(sysInfo),
-    getSystemSetting: () => ({ wifiEnabled: true, bluetoothEnabled: false, locationEnabled: true, deviceOrientation: "portrait" }),
-    getAppBaseInfo: () => ({ SDKVersion: "3.8.7", version: "8.0.0", language: "zh_CN", enableDebug: false }),
-    getDeviceInfo: () => ({ platform: "mac", system: "Mac OS X 14.2.0", model: "Mac15,3", brand: "apple" }),
+    getSystemSetting: () => ({ wifiEnabled: true, bluetoothEnabled: false, locationEnabled: true, deviceOrientation: sysInfo.deviceOrientation ?? "portrait" }),
+    getAppBaseInfo: () => ({ SDKVersion: sysInfo.SDKVersion, version: sysInfo.version, language: sysInfo.language, enableDebug: false }),
+    getDeviceInfo: () => ({ platform: sysInfo.platform, system: sysInfo.system, model: sysInfo.model, brand: sysInfo.brand, ...(sysInfo.benchmarkLevel !== undefined ? { benchmarkLevel: sysInfo.benchmarkLevel } : {}) }),
     getNetworkType: (o) => o.success?.({ networkType: "wifi" }),
     getConnectedWifi: (o) => o.fail?.({ errMsg: "not supported" }),
     getPrivacySetting: (o) => o.success?.({ needAuthorization: false }),
@@ -76,8 +80,8 @@ function buildWxStub(appid, storage, appVersion, log) {
   };
 }
 
-function createSandbox(appid, storage, appVersion, log, ua) {
-  const wx = buildWxStub(appid, storage, appVersion, log);
+function createSandbox(appid, storage, appVersion, log, ua, device) {
+  const wx = buildWxStub(appid, storage, appVersion, log, device);
   const modules = {};
   const cache = {};
   const state = { suppressRequire: true, missing: new Set() };
@@ -197,7 +201,9 @@ function createSandbox(appid, storage, appVersion, log, ua) {
     userAgent: ua || DEFAULT_UA,
     platform: "MacIntel", language: "zh-CN", languages: ["zh-CN"], onLine: true, sendBeacon: () => true,
   };
-  const screen = { width: 1512, height: 982, availWidth: 1512, availHeight: 982, colorDepth: 24, pixelDepth: 24 };
+  // DOM screen 跟随(可被 device 覆盖的)sysInfo 尺寸,避免"系统报手机视口、screen 却是桌面"自相矛盾
+  const _si = wx.getSystemInfoSync();
+  const screen = { width: _si.screenWidth, height: _si.screenHeight, availWidth: _si.screenWidth, availHeight: _si.screenHeight, colorDepth: 24, pixelDepth: 24 };
   const location = { href: `https://servicewechat.com/${appid}/${appVersion}/page-frame.html`, protocol: "https:", host: "servicewechat.com", hostname: "servicewechat.com", port: "", pathname: "/", search: "", hash: "", origin: "https://servicewechat.com" };
   // performance / atob / btoa：VMP 平台检测与 base64 编解码常用，缺则走异常分支或抛错
   const _perfOrigin = Date.now();
@@ -271,7 +277,7 @@ function createSandbox(appid, storage, appVersion, log, ua) {
  * @returns {{ sandbox, modules, cache, requireMod, state, setTimestamp, storage, appOpts, getApp, logs }}
  */
 export function loadBundle(opts) {
-  const { appid, bundlePath, bundlePaths, storage = {}, appVersion = "1.0.0", timeout = 20000, deterministic = false, ua } = opts;
+  const { appid, bundlePath, bundlePaths, storage = {}, appVersion = "1.0.0", timeout = 20000, deterministic = false, ua, device } = opts;
   const logs = [];
   const log = opts.log || ((m) => logs.push(m));
 
@@ -280,7 +286,7 @@ export function loadBundle(opts) {
   const paths = (Array.isArray(bundlePaths) && bundlePaths.length) ? bundlePaths : [bundlePath];
   const src = paths.map((p) => readFileSync(p, "utf8")).join("\n;\n");
 
-  const ctx = createSandbox(appid, storage, appVersion, log, ua);
+  const ctx = createSandbox(appid, storage, appVersion, log, ua, device);
   vm.createContext(ctx.sandbox);
   ctx.sandbox.globalThis = ctx.sandbox; // realm 自洽：globalThis 指回 sandbox（用上下文原生 intrinsics）
 

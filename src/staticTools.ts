@@ -408,15 +408,17 @@ export function registerStaticTools(server: McpServer): void {
         bundle_paths: z.array(z.string()).optional().describe("多 bundle 协同加载[主包,分包,...]，顺序拼接单次载入(分包签名 SDK 依赖主包 runtime 时用)"),
         storage: z.string().optional().describe("预设 wx storage JSON (如 '{\"key\":\"value\"}')"),
         ua: z.string().optional().describe("覆盖 navigator.userAgent (VMP 常把 UA 编进签名，需与目标客户端一致)"),
+        device: z.string().optional().describe("真机种子 JSON：覆盖 wx 系统/设备信息字段(如 {\"platform\":\"android\",\"system\":\"Android 14\",\"model\":\"...\",\"screenWidth\":414,\"screenHeight\":896,\"SDKVersion\":\"3.16.1\"})，使离线签名环境指纹与目标设备一致。不传则用默认。"),
         timeout_ms: z.number().optional().describe("沙箱进程整体超时 (默认 60000)"),
       },
     },
-    async ({ appid, code, bundle_path, bundle_paths, storage, ua, timeout_ms }: { appid: string; code: string; bundle_path?: string; bundle_paths?: string[]; storage?: string; ua?: string; timeout_ms?: number }) => {
+    async ({ appid, code, bundle_path, bundle_paths, storage, ua, device, timeout_ms }: { appid: string; code: string; bundle_path?: string; bundle_paths?: string[]; storage?: string; ua?: string; device?: string; timeout_ms?: number }) => {
       try {
         const args = [appid, "--eval", code];
         for (const b of bundle_paths || (bundle_path ? [bundle_path] : [])) args.push("--bundle", b);
         if (storage) args.push("--storage", storage);
         if (ua) args.push("--ua", ua);
+        if (device) args.push("--device", device);
         const output = await runScript("scripts/sandbox-run.mjs", args, timeout_ms || 60_000);
         return ok(output);
       } catch (e) {

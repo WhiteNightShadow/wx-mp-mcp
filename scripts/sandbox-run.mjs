@@ -41,12 +41,13 @@ function findBundle(appid) {
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const opts = { appid: null, bundlePaths: [], evalCode: null, listModules: false, storage: {}, ua: null };
+  const opts = { appid: null, bundlePaths: [], evalCode: null, listModules: false, storage: {}, ua: null, device: null };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--eval" && args[i + 1]) { opts.evalCode = args[++i]; }
     else if (args[i] === "--bundle" && args[i + 1]) { opts.bundlePaths.push(args[++i]); }   // 可重复:多 bundle 协同
     else if (args[i] === "--bundles" && args[i + 1]) { opts.bundlePaths.push(...args[++i].split(",").map((s) => s.trim()).filter(Boolean)); }
     else if (args[i] === "--ua" && args[i + 1]) { opts.ua = args[++i]; }
+    else if (args[i] === "--device" && args[i + 1]) { opts.device = JSON.parse(args[++i]); }  // 真机种子:覆盖 system/device 字段
     else if (args[i] === "--list-modules") { opts.listModules = true; }
     else if (args[i] === "--storage" && args[i + 1]) { opts.storage = JSON.parse(args[++i]); }
     else if (!args[i].startsWith("-")) { opts.appid = args[i]; }
@@ -70,7 +71,7 @@ async function main() {
   }
 
   console.error(`Loading bundle: ${bundlePaths.join(" + ")}`);
-  const ctx = loadBundle({ appid: opts.appid, bundlePaths, storage: opts.storage, timeout: 30000, ua: opts.ua });
+  const ctx = loadBundle({ appid: opts.appid, bundlePaths, storage: opts.storage, timeout: 30000, ua: opts.ua, device: opts.device });
   console.error(`Loaded ${Object.keys(ctx.modules).length} modules, ${ctx.logs.length} log lines`);
 
   if (opts.listModules) {
