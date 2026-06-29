@@ -185,6 +185,14 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 <h2><img src="docs/sec-changelog.svg" height="26" align="middle">&nbsp;迭代记录</h2>
 
+**v0.1.2** — 沙箱通用加固(实战打磨)
+- **realm 自洽**：沙箱不再注入外层内建，`[].push === Array.prototype.push`，JSVMP/字节码解释器不再崩。
+- **webpack 惰性取模块**：覆盖全局 jsonp 与内嵌 `{id:fn}` 两种形态，只实例化目标模块子树、不引导 app。
+- **多 bundle 协同**：分包签名 SDK 依赖主包 runtime 时，`bundle_paths` 拼接单次载入。
+- **JSVMP 友好**：`runInContext(code, ms)` 带超时执行(同步死循环可中断)、调用后清退心跳定时器；补齐 `wx.getRandomValues`/`getLogManager`、`performance`/`atob`/`btoa`、可配 UA。
+- **网关签名检测**：识别 `hmac-auth` / `x-hmac-digest` / `mtgsig` / `wsgsig` / `__NS_sig` 等签名协议，消除「重度签名却报无签名」假阴性。
+- **解包↔沙箱路径统一** + 报错清噪(不再回吐整包源码/命令行)。
+
 **v0.1.1**
 - 新增 `mp_capture_import`：已有抓包（HAR / cURL / JSON 体 / JSONL）一键归一，自己抓的包直接喂破解，免走代理。
 - **analyze→crack 自动桥**：`mp_analyze` 报告多吐 `crackHint`（候选密钥 + 算法 + 参数序），`mp_sign_crack` 传 `report` 直接消费，少一次人工搬运。

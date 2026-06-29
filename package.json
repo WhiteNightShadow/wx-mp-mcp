@@ -1,6 +1,6 @@
 {
   "name": "wx-mp-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "WeChat mini-program static analysis MCP server. One-click unpack, sign/crypto detection, sign cracking, API extraction, and repro code generation for authorized mini programs.",
   "type": "module",
