@@ -191,9 +191,12 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 <h2><img src="docs/sec-changelog.svg" height="26" align="middle">&nbsp;迭代记录</h2>
 
-**v0.1.2** — 沙箱通用加固(实战打磨)
+**v0.1.3** — 缓存探测兼容性 + macOS 权限诊断
 - **缓存目录递归自动探测**：不再写死单一路径，从微信缓存锚点递归发现所有含 `<appid>/<版本>/*.wxapkg` 的「包根」。修复多账号 / 不同微信版本下缓存落在 `.../radium/users/<账号哈希>/...` 等非默认层级时 `mp_list_apps` 返回 0、`mp_analyze` 报「未找到缓存包」的问题；多账号自动合并去重。
 - **macOS 权限保护可诊断**：扫描遇到 TCC 容器保护（EPERM/EACCES）时不再静默吞掉，明确提示「授予完全磁盘访问权限」或「复制副本」两条解法；副本放进 `wxapkg-cache/` 等位置自动发现。`WXAPKG_ROOT` 支持多路径（`:` / `;`）覆盖。
+- `mp_decrypt` 传裸 appid 可自动定位最新缓存，输出落到项目内安全目录而非受保护容器。
+
+**v0.1.2** — 沙箱通用加固(实战打磨)
 - **realm 自洽**：沙箱不再注入外层内建，`[].push === Array.prototype.push`，JSVMP/字节码解释器不再崩。
 - **webpack 惰性取模块**：覆盖全局 jsonp 与内嵌 `{id:fn}` 两种形态，只实例化目标模块子树、不引导 app。
 - **多 bundle 协同**：分包签名 SDK 依赖主包 runtime 时，`bundle_paths` 拼接单次载入。
