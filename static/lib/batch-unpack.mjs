@@ -40,28 +40,12 @@ import {
 } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
-import { homedir, platform } from "node:os";
+import { WXAPKG_ROOT, WXAPKG_ROOTS } from "./wx-roots.mjs";
 
 // ── 常量 ────────────────────────────────────────────────────────────────
-function detectWxapkgRoot() {
-  const home = homedir();
-  const candidates =
-    platform() === "win32"
-      ? [
-          join(home, "Documents/WeChat Files/Applet"),
-          join(home, "Documents/WeChat Files/wxamp"),
-          join(process.env.APPDATA || "", "Tencent/WeChat/Applet"),
-        ]
-      : [
-          join(home, "Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/radium/Applet/packages"),
-        ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  return candidates[0];
-}
-
-export const WXAPKG_ROOT = process.env.WXAPKG_ROOT || detectWxapkgRoot();
+// 缓存根目录探测已抽到 wx-roots.mjs(支持多账号 / 多版本布局自动发现)。
+// WXAPKG_ROOT = 主包根(向后兼容); WXAPKG_ROOTS = 全部包根(多账号合并用)。
+export { WXAPKG_ROOT, WXAPKG_ROOTS };
 
 const V1MMWX = Buffer.from("V1MMWX");
 const SALT = "saltiest";
@@ -184,7 +168,13 @@ function classifyPkg(filename) {
   return null;
 }
 
-/** 选某 appid 下数值最大(最新)且含 .wxapkg 的版本目录。返回 {version, dir} 或 null。 */
+/** 要搜索的包根列表: 显式 opts.root 优先, 否则用全部探测到的包根(多账号合并)。 */
+function rootsToSearch(opts = {}) {
+  if (opts.root) return [opts.root];
+  return WXAPKG_ROOTS.length ? WXAPKG_ROOTS : [WXAPKG_ROOT];
+}
+
+/** 选某 appid 下数值最大(最新)且含 .wxapkg 的版本目录。返回 {version, dir, root} 或 null。 */
 export function findLatestVersionDir(appid, root = WXAPKG_ROOT) {
   const appDir = join(root, appid);
   if (!existsSync(appDir)) return null;
@@ -197,10 +187,20 @@ export function findLatestVersionDir(appid, root = WXAPKG_ROOT) {
   for (const v of versions) {
     const vdir = join(appDir, v);
     if (readdirSync(vdir).some((f) => f.endsWith(".wxapkg"))) {
-      return { version: v, dir: vdir };
+      return { version: v, dir: vdir, root };
     }
   }
   return null;
+}
+
+/** 跨所有包根找某 appid 的最新版本目录, 命中多个根时取版本号最大者。 */
+export function findLatestVersionDirAnyRoot(appid, roots = rootsToSearch()) {
+  let best = null;
+  for (const root of roots) {
+    const ver = findLatestVersionDir(appid, root);
+    if (ver && (!best || Number(ver.version) > Number(best.version))) best = ver;
+  }
+  return best;
 }
 
 /** 在某版本目录里分类列出 main/subPackages/plugins/all。 */
@@ -224,14 +224,21 @@ function collectPackages(versionDir) {
  * main 可能为 null(纯插件应用)。
  */
 export function findAppPackages(appid, opts = {}) {
-  const root = opts.root || WXAPKG_ROOT;
   let versionDir, version;
   if (opts.version != null) {
-    versionDir = join(root, appid, String(opts.version));
-    if (!existsSync(versionDir)) return null;
+    // 指定版本: 在显式 root 或全部包根里找到该版本目录。
+    const roots = rootsToSearch(opts);
+    versionDir = null;
+    for (const root of roots) {
+      const cand = join(root, appid, String(opts.version));
+      if (existsSync(cand)) { versionDir = cand; break; }
+    }
+    if (!versionDir) return null;
     version = String(opts.version);
   } else {
-    const ver = findLatestVersionDir(appid, root);
+    const ver = opts.root
+      ? findLatestVersionDir(appid, opts.root)
+      : findLatestVersionDirAnyRoot(appid);
     if (!ver) return null;
     versionDir = ver.dir;
     version = ver.version;
@@ -246,32 +253,42 @@ export function findAppPackages(appid, opts = {}) {
  *     packages:{ main:bool, subCount, pluginCount, total } }
  */
 export function listAllApps(opts = {}) {
-  const root = opts.root || WXAPKG_ROOT;
-  if (!existsSync(root)) return [];
-  const apps = [];
-  for (const d of readdirSync(root)) {
-    if (!APPID_RE.test(d)) continue;
-    const appDir = join(root, d);
-    let versions;
-    try {
-      versions = readdirSync(appDir)
-        .filter((v) => /^\d+$/.test(v) && statSync(join(appDir, v)).isDirectory())
-        .sort((a, b) => Number(b) - Number(a));
-    } catch { continue; }
-    const latest = findLatestVersionDir(d, root);
-    let pkgs = { main: false, subCount: 0, pluginCount: 0, total: 0 };
-    if (latest) {
-      const fp = findAppPackages(d, { root });
-      pkgs = {
-        main: !!fp.main,
-        subCount: fp.subPackages.length,
-        pluginCount: fp.plugins.length,
-        total: fp.all.length,
-      };
+  const roots = rootsToSearch(opts);
+  const byAppid = new Map(); // appid → entry(跨账号合并, 取最新版本所在根)
+  for (const root of roots) {
+    if (!existsSync(root)) continue;
+    let dirs;
+    try { dirs = readdirSync(root); } catch { continue; }
+    for (const d of dirs) {
+      if (!APPID_RE.test(d)) continue;
+      const appDir = join(root, d);
+      let versions;
+      try {
+        versions = readdirSync(appDir)
+          .filter((v) => /^\d+$/.test(v) && statSync(join(appDir, v)).isDirectory())
+          .sort((a, b) => Number(b) - Number(a));
+      } catch { continue; }
+      const latest = findLatestVersionDir(d, root);
+      let pkgs = { main: false, subCount: 0, pluginCount: 0, total: 0 };
+      if (latest) {
+        const fp = findAppPackages(d, { root });
+        pkgs = {
+          main: !!fp.main,
+          subCount: fp.subPackages.length,
+          pluginCount: fp.plugins.length,
+          total: fp.all.length,
+        };
+      }
+      const entry = { appid: d, root, versions, latest, packages: pkgs };
+      const prev = byAppid.get(d);
+      // 同一 appid 在多个根都有 → 留版本号最大(有包优先)的那个。
+      if (!prev) { byAppid.set(d, entry); continue; }
+      const pv = prev.latest ? Number(prev.latest.version) : -1;
+      const cv = latest ? Number(latest.version) : -1;
+      if (cv > pv) byAppid.set(d, entry);
     }
-    apps.push({ appid: d, versions, latest, packages: pkgs });
   }
-  return apps.sort((a, b) => a.appid.localeCompare(b.appid));
+  return [...byAppid.values()].sort((a, b) => a.appid.localeCompare(b.appid));
 }
 
 // ── 主入口: 批量解包 ──────────────────────────────────────────────────────
@@ -296,7 +313,7 @@ export function listAllApps(opts = {}) {
  */
 export async function batchUnpack(appid, outRoot, opts = {}) {
   const log = opts.onLog || (() => {});
-  const found = findAppPackages(appid, { root: opts.root || WXAPKG_ROOT, version: opts.version });
+  const found = findAppPackages(appid, { root: opts.root, version: opts.version });
   if (!found) throw new Error(`未找到 appid=${appid} 的缓存包(或无任何版本目录)`);
 
   const mainDir = opts.mergeRoot || join(outRoot, "app");

@@ -17,29 +17,13 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import { execSync } from "node:child_process";
+import { WXAPKG_ROOT, WXAPKG_ROOTS, APPID_RE, diagnoseAccess } from "../static/lib/wx-roots.mjs";
 
-function detectWxapkgRoot() {
-  const home = homedir();
-  const candidates =
-    platform() === "win32"
-      ? [
-          join(home, "Documents/WeChat Files/Applet"),
-          join(home, "Documents/WeChat Files/wxamp"),
-        ]
-      : [
-          join(home, "Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/radium/Applet/packages"),
-        ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  return candidates[0];
-}
-
-const WXAPKG_ROOT = process.env.WXAPKG_ROOT || detectWxapkgRoot();
-
+const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HEADER = Buffer.from("V1MMWX");
 const SALT = "saltiest";
 const IV = Buffer.from("the iv: 16 bytes");
@@ -129,26 +113,48 @@ function findActiveAppId() {
 }
 
 function findLatestWxapkg(appid) {
-  const appDir = join(WXAPKG_ROOT, appid);
-  if (!existsSync(appDir)) return null;
-  const versions = readdirSync(appDir)
-    .filter((v) => /^\d+$/.test(v))
-    .sort((a, b) => Number(b) - Number(a));
-  for (const v of versions) {
-    const vdir = join(appDir, v);
-    const app = join(vdir, "__APP__.wxapkg");
-    if (existsSync(app)) return { main: app, version: v, dir: vdir };
+  const roots = WXAPKG_ROOTS.length ? WXAPKG_ROOTS : [WXAPKG_ROOT];
+  let best = null;
+  for (const root of roots) {
+    const appDir = join(root, appid);
+    if (!existsSync(appDir)) continue;
+    let versions;
+    try {
+      versions = readdirSync(appDir)
+        .filter((v) => /^\d+$/.test(v))
+        .sort((a, b) => Number(b) - Number(a));
+    } catch { continue; }
+    for (const v of versions) {
+      const vdir = join(appDir, v);
+      const app = join(vdir, "__APP__.wxapkg");
+      if (existsSync(app) && (!best || Number(v) > Number(best.version))) {
+        best = { main: app, version: v, dir: vdir };
+        break; // 该根内已是最新版本
+      }
+    }
   }
-  return null;
+  return best;
 }
 
 function listAppIds() {
-  console.log(`wxapkg 缓存目录: ${WXAPKG_ROOT}\n`);
-  try {
-    const dirs = readdirSync(WXAPKG_ROOT).filter((d) => d.startsWith("wx") || d.startsWith("tt"));
-    console.log(`找到 ${dirs.length} 个小程序:`);
+  const roots = WXAPKG_ROOTS.length ? WXAPKG_ROOTS : [WXAPKG_ROOT];
+  console.log(`wxapkg 缓存包根 (${roots.length}):`);
+  for (const r of roots) console.log(`  - ${r}`);
+  console.log("");
+  const seen = new Set();
+  let count = 0;
+  for (const root of roots) {
+    let dirs;
+    try {
+      dirs = readdirSync(root).filter((d) => d.startsWith("wx") || d.startsWith("tt"));
+    } catch (e) {
+      console.error(`读取 ${root} 失败:`, e.message);
+      continue;
+    }
     for (const d of dirs) {
-      const subdir = join(WXAPKG_ROOT, d);
+      if (seen.has(d)) continue;
+      seen.add(d);
+      const subdir = join(root, d);
       try {
         const versions = readdirSync(subdir).filter((v) => /^\d+$/.test(v));
         const pkgs = [];
@@ -157,13 +163,24 @@ function listAppIds() {
           const files = readdirSync(vdir).filter((f) => f.endsWith(".wxapkg"));
           pkgs.push(...files.map((f) => `v${v}/${f}`));
         }
+        if (!pkgs.length) continue;
+        count++;
         console.log(`  ${d}  (${pkgs.length} 个包: ${pkgs.join(", ")})`);
       } catch {
         console.log(`  ${d}  (读取失败)`);
       }
     }
-  } catch (e) {
-    console.error("读取目录失败:", e.message);
+  }
+  console.log(`\n共找到 ${count} 个小程序。`);
+  if (count === 0) {
+    const diag = diagnoseAccess();
+    if (diag.blocked) {
+      console.log("");
+      console.log(diag.hint);
+    } else {
+      console.log("⚠️ 未找到任何缓存包。多账号/新版微信可能放在 .../radium/users/<账号哈希>/ 下。");
+      console.log("   可手动指定 WXAPKG_ROOT 环境变量(多路径用 ':' 分隔, Windows 用 ';')。");
+    }
   }
 }
 
@@ -253,11 +270,32 @@ function main() {
     const pkg = findLatestWxapkg(appid);
     if (!pkg) {
       console.error(`未找到 ${appid} 的 wxapkg 缓存`);
+      const diag = diagnoseAccess();
+      if (diag.blocked) console.error("\n" + diag.hint);
       process.exit(1);
     }
     args[0] = pkg.main;
     args[1] = appid;
+    if (!args[2]) args[2] = join(PROJECT_ROOT, "static", "out", appid, "_decrypt");
     console.log(`使用缓存: ${pkg.main} (版本 ${pkg.version})\n`);
+  } else if (APPID_RE.test(args[0]) && !existsSync(args[0])) {
+    // 传入裸 appid(非文件路径) → 自动定位最新缓存包(对齐 mp_decrypt 的「传 appid 自动找最新」契约)。
+    const appid = args[0];
+    const pkg = findLatestWxapkg(appid);
+    if (!pkg) {
+      console.error(`未找到 appid=${appid} 的 wxapkg 缓存`);
+      const diag = diagnoseAccess();
+      if (diag.blocked) console.error("\n" + diag.hint);
+      else {
+        console.error("多账号/新版微信可能放在 .../radium/users/<账号哈希>/ 下;");
+        console.error("可手动指定 WXAPKG_ROOT,或直接传 .wxapkg 文件路径。");
+      }
+      process.exit(1);
+    }
+    args[0] = pkg.main;
+    args[1] = appid;
+    if (!args[2]) args[2] = join(PROJECT_ROOT, "static", "out", appid, "_decrypt");
+    console.log(`定位到缓存: ${pkg.main} (版本 ${pkg.version})\n`);
   }
 
   if (args.length < 1) {

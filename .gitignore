@@ -8,3 +8,4 @@ data/
 static/out/
 static/unpacked/
 captures/
+wxapkg-cache/

@@ -135,6 +135,12 @@ claude mcp add wx-mp-mcp -- node /绝对路径/wx-mp-mcp/dist/index.js
 
 > **抓包额外准备**：本机装 `mitmproxy`（`pip install mitmproxy` 或 `brew install mitmproxy`），手机 WiFi 代理指向「本机 IP : 8080」并安装其 CA 证书。其余工具零外部依赖、开箱即用。
 
+> **⚠️ macOS 提示「容器目录受权限保护」/ 找不到缓存 / 解包阻塞**：微信缓存在沙盒容器里，受 macOS TCC 保护。MCP 是被你的 AI 工具拉起的 `node` 子进程，继承上层程序的权限。若报「受保护」「找不到缓存」，二选一：
+> - **推荐**：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 添加运行 MCP 的程序（Terminal / iTerm / Cursor / Claude）→ **完全退出再重开**。
+> - **兜底**：用访达把 `.../radium/Applet/packages` 复制到项目下的 `wxapkg-cache/`（或 `~/Desktop/wxapkg-cache`），会被自动发现；也可复制到任意目录后设 `WXAPKG_ROOT` 指向它。
+>
+> 多账号 / 不同微信版本下缓存可能落在 `.../radium/users/<账号哈希>/...` 等层级，现已自动递归探测并合并，无需手配。
+
 ### 3. 上手示例
 
 把目标告诉 AI，它会自动走上面的工作流：
@@ -186,6 +192,8 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 <h2><img src="docs/sec-changelog.svg" height="26" align="middle">&nbsp;迭代记录</h2>
 
 **v0.1.2** — 沙箱通用加固(实战打磨)
+- **缓存目录递归自动探测**：不再写死单一路径，从微信缓存锚点递归发现所有含 `<appid>/<版本>/*.wxapkg` 的「包根」。修复多账号 / 不同微信版本下缓存落在 `.../radium/users/<账号哈希>/...` 等非默认层级时 `mp_list_apps` 返回 0、`mp_analyze` 报「未找到缓存包」的问题；多账号自动合并去重。
+- **macOS 权限保护可诊断**：扫描遇到 TCC 容器保护（EPERM/EACCES）时不再静默吞掉，明确提示「授予完全磁盘访问权限」或「复制副本」两条解法；副本放进 `wxapkg-cache/` 等位置自动发现。`WXAPKG_ROOT` 支持多路径（`:` / `;`）覆盖。
 - **realm 自洽**：沙箱不再注入外层内建，`[].push === Array.prototype.push`，JSVMP/字节码解释器不再崩。
 - **webpack 惰性取模块**：覆盖全局 jsonp 与内嵌 `{id:fn}` 两种形态，只实例化目标模块子树、不引导 app。
 - **多 bundle 协同**：分包签名 SDK 依赖主包 runtime 时，`bundle_paths` 拼接单次载入。

@@ -25,8 +25,9 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  WXAPKG_ROOT, listAllApps, findAppPackages, batchUnpack,
+  WXAPKG_ROOT, WXAPKG_ROOTS, listAllApps, findAppPackages, batchUnpack,
 } from "./lib/batch-unpack.mjs";
+import { diagnoseAccess } from "./lib/wx-roots.mjs";
 import { locateCrypto } from "./lib/crypto-locate.mjs";
 import { extractApis, generateReproCode } from "./lib/codegen.mjs";
 import { toSignInfo } from "./lib/sign-adapter.mjs";
@@ -250,8 +251,22 @@ async function main() {
 
   if (flags.has("--list")) {
     const apps = listAllApps();
-    console.log(`\n缓存目录: ${WXAPKG_ROOT}`);
-    console.log(`找到 ${apps.length} 个小程序:\n`);
+    if (WXAPKG_ROOTS.length) {
+      console.log(`\n探测到 ${WXAPKG_ROOTS.length} 个缓存包根:`);
+      for (const r of WXAPKG_ROOTS) console.log(`  - ${r}`);
+    } else {
+      console.log(`\n⚠️ 未自动探测到任何缓存包根 (回退默认: ${WXAPKG_ROOT})`);
+      const diag = diagnoseAccess();
+      if (diag.blocked) {
+        console.log("");
+        console.log(diag.hint);
+      } else {
+        console.log("   多账号/不同微信版本可能放在 .../radium/users/<账号哈希>/ 下。");
+        console.log("   可手动指定: 设环境变量 WXAPKG_ROOT=<含 <appid>/<版本>/*.wxapkg 的目录>");
+        console.log("   (多个路径用 ':' 分隔, Windows 用 ';')");
+      }
+    }
+    console.log(`\n找到 ${apps.length} 个小程序:\n`);
     for (const a of apps) {
       const p = a.packages;
       console.log(`  ${a.appid}  v${a.latest?.version || "?"}  ` +
@@ -296,6 +311,14 @@ async function main() {
       summary.failed++;
       summary.errors.push({ appid, error: e.message });
       console.error(`  ❌ ${appid}: ${e.message}`);
+      // 「未找到缓存包」时,若实为 macOS 容器权限保护,给出明确指引(只提示一次)。
+      if (!summary._diagShown && /未找到|not found|缓存包/.test(e.message)) {
+        const diag = diagnoseAccess();
+        if (diag.blocked) {
+          console.error("\n" + diag.hint + "\n");
+          summary._diagShown = true;
+        }
+      }
     }
   }
 
