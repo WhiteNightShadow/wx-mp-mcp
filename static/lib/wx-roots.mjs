@@ -33,6 +33,16 @@ export const APPID_RE = /^(wx[0-9a-f]{16}|tt[0-9a-f]{16})$/i;
 const MAX_SCAN_DEPTH = 6;
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+// 递归时跳过的「重目录」(聊天文件/媒体/备份/缓存等，永远不含 wxapkg)。
+// 既提速，也避免去扫 xwechat_files 下几十 GB 的聊天归档。
+// 注意：包路径组件(radium/Applet/packages/users/<wxid>/<appid>/<版本>)均不在此表。
+const SKIP_DIR_NAMES = new Set([
+  "msg", "filestorage", "file", "attach", "attachment", "favorite",
+  "video", "image", "img", "voice", "audio", "emoji", "emoticon", "sns",
+  "backup", "all_users", "db_storage", "cache", "wmpfcache", "web", "xworker",
+  "mmkv", "crashinfo", "log", "logs", "temp", "tmp", "matrix", "xeditor", "xfile",
+]);
+
 // 扫描过程中收集的权限错误(EPERM/EACCES)，供上层诊断 macOS TCC 容器保护。
 const _accessErrors = [];
 
@@ -93,6 +103,7 @@ function scanForPackageRoots(dir, out, depth) {
   for (const e of entries) {
     // appid 命名的叶子目录不是「中转目录」(包根已在上一层命中)，跳过省时
     if (APPID_RE.test(e)) continue;
+    if (SKIP_DIR_NAMES.has(e.toLowerCase())) continue; // 跳过聊天/媒体/缓存等重目录
     const child = join(dir, e);
     if (isDir(child)) scanForPackageRoots(child, out, depth + 1);
   }
@@ -109,14 +120,20 @@ function anchorDirs() {
     join(home, "Downloads", "wxapkg-cache"),
   ];
   if (platform() === "win32") {
-    const appdata = process.env.APPDATA || "";
+    const appdata = process.env.APPDATA || "";          // …/AppData/Roaming
+    const localAppData = process.env.LOCALAPPDATA || ""; // …/AppData/Local
     return [
+      // 微信 4.0 (xwechat / 新版)：小程序 wxapkg 在 %APPDATA%/Tencent/xwechat/radium/Applet
+      join(appdata, "Tencent/xwechat/radium"),
+      join(appdata, "Tencent/xwechat"),
+      join(home, "Documents/xwechat_files"),  // 新版数据根(主要是聊天文件，偶有账号级 applet 缓存)
+      // 旧版微信 3.x：Documents/WeChat Files/Applet
       join(home, "Documents/WeChat Files"),
       join(home, "Documents/Tencent Files"),
       join(appdata, "Tencent/WeChat"),
-      join(appdata, "Tencent/xwechat"),
+      localAppData ? join(localAppData, "Tencent/xwechat") : "",
       ...copyAnchors,
-    ];
+    ].filter(Boolean);
   }
   // macOS: 大小写两种 bundle id 都试(xinWeChat / xinWechat)，文件系统通常大小写不敏感，留作保险。
   return [

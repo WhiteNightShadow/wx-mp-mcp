@@ -140,6 +140,8 @@ claude mcp add wx-mp-mcp -- node /绝对路径/wx-mp-mcp/dist/index.js
 > - **兜底**：用访达把 `.../radium/Applet/packages` 复制到项目下的 `wxapkg-cache/`（或 `~/Desktop/wxapkg-cache`），会被自动发现；也可复制到任意目录后设 `WXAPKG_ROOT` 指向它。
 >
 > 多账号 / 不同微信版本下缓存可能落在 `.../radium/users/<账号哈希>/...` 等层级，现已自动递归探测并合并，无需手配。
+>
+> **Windows**：新版微信 4.0(xwechat) 的小程序包在 `%APPDATA%\Tencent\xwechat\radium\Applet`，旧版 3.x 在 `Documents\WeChat Files\Applet`，两者均自动探测。注意 `Documents\xwechat_files\` 是聊天文件存储、通常不含 wxapkg。
 
 ### 3. 上手示例
 
@@ -193,6 +195,7 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 **v0.1.3** — 缓存探测兼容性 + macOS 权限诊断
 - **缓存目录递归自动探测**：不再写死单一路径，从微信缓存锚点递归发现所有含 `<appid>/<版本>/*.wxapkg` 的「包根」。修复多账号 / 不同微信版本下缓存落在 `.../radium/users/<账号哈希>/...` 等非默认层级时 `mp_list_apps` 返回 0、`mp_analyze` 报「未找到缓存包」的问题；多账号自动合并去重。
+- **Windows 新版微信 4.0(xwechat) 支持**：补 `%APPDATA%\Tencent\xwechat\radium\Applet` 路径（旧版 `WeChat Files\Applet` 仍兼容）；递归时跳过聊天/媒体/缓存等重目录，避免扫 `xwechat_files` 的大体积归档拖慢。
 - **macOS 权限保护可诊断**：扫描遇到 TCC 容器保护（EPERM/EACCES）时不再静默吞掉，明确提示「授予完全磁盘访问权限」或「复制副本」两条解法；副本放进 `wxapkg-cache/` 等位置自动发现。`WXAPKG_ROOT` 支持多路径（`:` / `;`）覆盖。
 - `mp_decrypt` 传裸 appid 可自动定位最新缓存，输出落到项目内安全目录而非受保护容器。
 
