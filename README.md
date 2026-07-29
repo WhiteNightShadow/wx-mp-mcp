@@ -133,7 +133,7 @@ claude mcp add wx-mp-mcp -- node /绝对路径/wx-mp-mcp/dist/index.js
 
 </details>
 
-> **抓包额外准备**：本机装 `mitmproxy`（`pip install mitmproxy` 或 `brew install mitmproxy`），手机 WiFi 代理指向「本机 IP : 8080」并安装其 CA 证书。其余工具零外部依赖、开箱即用。
+> **抓包额外准备**：抓包属于可选能力，需在本机安装 `mitmproxy`（`pip install mitmproxy` 或 `brew install mitmproxy`）。代理接入与证书配置由用户根据自己的采集环境完成；其余工具无额外外部依赖。
 
 > **⚠️ macOS 提示「容器目录受权限保护」/ 找不到缓存 / 解包阻塞**：微信缓存在沙盒容器里，受 macOS TCC 保护。MCP 是被你的 AI 工具拉起的 `node` 子进程，继承上层程序的权限。若报「受保护」「找不到缓存」，二选一：
 > - **推荐**：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 添加运行 MCP 的程序（Terminal / iTerm / Cursor / Claude）→ **完全退出再重开**。
