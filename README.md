@@ -217,6 +217,10 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 - **不碰微信进程**：磁盘加密包离线解密（V1MMWX）+ 被动抓包 + Node vm 沙箱，无内存改写、无进程注入。
 - **签名多信号判定**：拦截器 / 安全 SDK / 签名头 / 响应解密联合判定，避免「误报无签名」。
 
+## 许可证
+
+本项目以 [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0）发布。Copyright © 2026 WhiteNightShadow。
+
 ---
 
 > ⚠️ 仅用于对**自有 / 已授权**小程序的安全分析与接口对接。不得用于未授权访问、绕过他人系统安全机制或违反服务条款的行为。
