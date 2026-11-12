@@ -219,7 +219,7 @@ node signer.mjs '{"ts":"1719000000","orderId":"123"}'
 
 ## 许可证
 
-本项目以 [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0）发布。Copyright © 2026 WhiteNightShadow。
+本项目以 [Apache License 2.0](LICENSE) 发布。Copyright © 2026 WhiteNightShadow。
 
 ---
 

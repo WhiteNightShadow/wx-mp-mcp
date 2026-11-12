@@ -2,7 +2,7 @@
   "name": "wx-mp-mcp",
   "version": "0.1.3",
   "private": true,
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "description": "WeChat mini-program static analysis MCP server. One-click unpack, sign/crypto detection, sign cracking, API extraction, and repro code generation for authorized mini programs.",
   "type": "module",
   "bin": {
